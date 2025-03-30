@@ -1,5 +1,6 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <HTTPUpdate.h>
 #include "esp_sleep.h"
 
@@ -7,26 +8,35 @@
 const char* ssid = "Pretty-Fly-For-A-WiFi";
 const char* password = "Simsons1982";
 
-// Discord Webhook
+// Discord Webhook URL
 const char* webhookUrl = "https://discord.com/api/webhooks/1355250299434172597/NERGOBYhZGbssnJx9O32151kHp3857ZBUMazs5PdFLEujspVOdNp3aj1RtEfMawYGrSM";
 
-// Firmware update URL (your uploaded .bin file)
-const char* firmwareUrl = "http://raw.githack.com/LinardsN/AirPing/main/sketch_mar28a/build/esp32.esp32.esp32/sketch_mar28a.ino.bin";
+// OTA Firmware URL (GitHub Raw)
+const char* firmwareUrl = "https://raw.githubusercontent.com/LinardsN/AirPing/main/sketch_mar28a/build/esp32.esp32.esp32/sketch_mar28a.ino.bin";
 
 // GPIO Definitions
 const gpio_num_t buttonPin = GPIO_NUM_13;
 const int ledPin = 2;
 
-// Messages array (same as before)
+// OTA Update Window (2 minutes)
+const unsigned long otaDuration = 2 * 60 * 1000UL; // 2 minutes
+
+// Debounce time
+const unsigned long debounceTime = 1000; // 1 sec debounce
+
+// Discord messages
 const char* messages[] = {
-  "It works!!",
+  "ssssss"
 };
+
+unsigned long lastPressTime = 0;
 
 void setup() {
   Serial.begin(115200);
   pinMode(ledPin, OUTPUT);
   digitalWrite(ledPin, LOW);
   pinMode(buttonPin, INPUT_PULLUP);
+  delay(100);
 
   WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi...");
@@ -39,20 +49,30 @@ void setup() {
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("\n✅ WiFi connected!");
     sendDiscordMessage();
-
-    Serial.println("🔍 Checking for OTA update...");
     performOTAUpdate();
 
-    delay(2000);  // short delay after update check
+    Serial.println("⏳ OTA active for 2 min. Press button to resend message.");
+
+    unsigned long otaStartTime = millis();
+    lastPressTime = millis();
+
+    while (millis() - otaStartTime < otaDuration) {
+      if (digitalRead(buttonPin) == LOW && (millis() - lastPressTime > debounceTime)) {
+        Serial.println("🔘 Button pressed! Sending another message...");
+        sendDiscordMessage();
+        lastPressTime = millis();
+      }
+      delay(10);
+    }
   } else {
-    Serial.println("\n⚠️ WiFi connection failed.");
+    Serial.println("\n⚠️ WiFi failed.");
   }
 
   enterDeepSleep();
 }
 
 void loop() {
-  // unused due to deep sleep
+  // unused (deep sleep)
 }
 
 void sendDiscordMessage() {
@@ -76,12 +96,16 @@ void sendDiscordMessage() {
 }
 
 void performOTAUpdate() {
-  WiFiClient client;
+  WiFiClientSecure client;
+  client.setInsecure(); // Important fix for HTTPS OTA
+
+  Serial.println("🔄 Checking for OTA update...");
+
   t_httpUpdate_return ret = httpUpdate.update(client, firmwareUrl);
 
   switch (ret) {
     case HTTP_UPDATE_FAILED:
-      Serial.printf("❌ OTA Update Failed. Error (%d): %s\n", 
+      Serial.printf("❌ OTA Update Failed (%d): %s\n", 
         httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str());
       break;
 
