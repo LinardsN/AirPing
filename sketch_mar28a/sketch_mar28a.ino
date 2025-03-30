@@ -25,7 +25,7 @@ unsigned long lastPressTime = 0;
 
 // === Discord Messages ===
 const char* messages[] = {
-  "WORKS"
+  "asd"
 };
 
 void setup() {
