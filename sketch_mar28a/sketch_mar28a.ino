@@ -10,8 +10,7 @@ const char* password = "Simsons1982";
 
 const char* webhookUrl = "https://discord.com/api/webhooks/1355250299434172597/NERGOBYhZGbssnJx9O32151kHp3857ZBUMazs5PdFLEujspVOdNp3aj1RtEfMawYGrSM";
 const char* firmwareUrl = "https://raw.githubusercontent.com/LinardsN/AirPing/main/sketch_mar28a/build/esp32.esp32.esp32/sketch_mar28a.ino.bin";
-const char* messagesUrl = "https://github.com/LinardsN/AirPing/raw/77a08e66767596047716cd91901feca495dc4087/sketch_mar28a/messages.txt";
-//const char* messagesUrl = "https://raw.githack.com/LinardsN/AirPing/main/sketch_mar28a/messages.txt";
+const char* messagesUrl = "https://raw.githack.com/LinardsN/AirPing/main/sketch_mar28a/messages.txt";
 const gpio_num_t buttonPin = GPIO_NUM_13;
 const unsigned long waitDuration = 60 * 1000UL; // 1 min
 const unsigned long debounceTime = 1000;
