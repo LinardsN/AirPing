@@ -8,7 +8,7 @@
 const char* ssid = "Pretty-Fly-For-A-WiFi";
 const char* password = "Simsons1982";
 
-// === Discord Webhook ===
+// === Discord Webhook URL ===
 const char* webhookUrl = "https://discord.com/api/webhooks/1355250299434172597/NERGOBYhZGbssnJx9O32151kHp3857ZBUMazs5PdFLEujspVOdNp3aj1RtEfMawYGrSM";
 
 // === OTA Firmware URL ===
@@ -18,14 +18,14 @@ const char* firmwareUrl = "https://raw.githubusercontent.com/LinardsN/AirPing/ma
 const gpio_num_t buttonPin = GPIO_NUM_13;
 const int ledPin = 2;
 
-// Debounce settings
+// === Timing ===
+const unsigned long waitDuration = 60 * 1000UL; // 1 minute
 const unsigned long debounceTime = 1000;
 unsigned long lastPressTime = 0;
 
-// Discord Messages
+// === Discord Messages ===
 const char* messages[] = {
-  "Fresh air time! 🌬️ Let's head outside!",
-  "Time for a breather, team! 🚀"
+  "WORKS"
 };
 
 void setup() {
@@ -37,21 +37,38 @@ void setup() {
 
   connectWiFi();
 
-  Serial.println("Awaiting button press to trigger Discord message and OTA...");
-  
-  while (true) {
-    if (digitalRead(buttonPin) == LOW && (millis() - lastPressTime > debounceTime)) {
-      Serial.println("🔘 Button pressed!");
+  esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
 
-      sendDiscordMessage();
-      performOTAUpdate();
+  if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0) {
+    // === Wakeup from Deep Sleep (Button pressed) ===
+    Serial.println("🔘 Woke up from deep sleep (button pressed). Sending Discord & OTA...");
+    sendDiscordMessage();
+    performOTAUpdate();
 
-      break; // only execute once, no loops
+    Serial.println("♻️ Restarting...");
+    ESP.restart();
+  } else {
+    // === Regular power-up or reboot ===
+    Serial.println("⚡️ Regular boot. Awaiting button press for 1 min...");
+
+    unsigned long startWait = millis();
+    bool pressed = false;
+
+    while (millis() - startWait < waitDuration) {
+      if (digitalRead(buttonPin) == LOW && (millis() - lastPressTime > debounceTime)) {
+        Serial.println("🔘 Button pressed during initial wait. Sending Discord & OTA...");
+        sendDiscordMessage();
+        performOTAUpdate();
+
+        Serial.println("♻️ Restarting...");
+        ESP.restart();
+      }
+      delay(10);
     }
-    delay(10);
-  }
 
-  enterDeepSleep();
+    Serial.println("⏳ 1 min elapsed, entering deep sleep.");
+    enterDeepSleep();
+  }
 }
 
 void loop() {
@@ -90,20 +107,20 @@ void sendDiscordMessage() {
   if (response > 0) {
     Serial.println("✅ Discord message sent: " + content);
   } else {
-    Serial.printf("❌ Failed to send Discord message. HTTP code: %d\n", response);
+    Serial.printf("❌ Discord message failed. HTTP code: %d\n", response);
   }
 
   http.end();
 }
 
-// === OTA Update (Single Execution) ===
+// === Perform OTA Update ===
 void performOTAUpdate() {
   WiFiClientSecure client;
   client.setInsecure();
 
-  Serial.println("🔄 Checking for OTA update...");
+  Serial.println("🔄 Checking OTA update...");
 
-  t_httpUpdate_return ret = httpUpdate.update(client, firmwareUrl, "1.0"); // Update "1.0" as needed
+  t_httpUpdate_return ret = httpUpdate.update(client, firmwareUrl, "1.0");
 
   switch (ret) {
     case HTTP_UPDATE_FAILED:
@@ -123,7 +140,7 @@ void performOTAUpdate() {
 
 // === Enter Deep Sleep ===
 void enterDeepSleep() {
-  Serial.println("💤 Entering deep sleep mode...");
+  Serial.println("💤 Deep sleep now...");
   esp_sleep_enable_ext0_wakeup(buttonPin, 0);
   delay(200);
   esp_deep_sleep_start();
