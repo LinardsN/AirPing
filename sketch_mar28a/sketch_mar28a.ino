@@ -19,36 +19,7 @@ const int ledPin = 2;
 
 // Messages array (same as before)
 const char* messages[] = {
-  "Build failed: Your vitamin D levels are below acceptable thresholds. Go debug outside.",
-  "Attention: The Jira backlog just overtook your life expectancy. Go outside immediately.",
-  "Reminder: Zero known critical bugs exist outside—your office chair disagrees.",
-  "Edgars merged his sanity to master branch by mistake. Get him outside quickly.",
-  "Renārs hit his daily quota of sighs. Mandatory outdoor session required.",
-  "Linards' bug count exceeded available integers. Reset him outside.",
-  "Gatis delayed his blog post so much it's now legacy software. Go discuss outside.",
-  "Each failed Jenkins build equals one minute outside. You now owe 43 hours.",
-  "Manual testers detected sunlight. Investigate immediately.",
-  "Dev team’s pull request to remove windows and doors approved—clearly wants fresh air.",
-  "Wi-Fi password updated to 'GoOutsideAlready!'. Try connecting outdoors.",
-  "Scrum Master says this sprint is a marathon. Pace yourself—outside.",
-  "Current build status: 'Passed, but emotionally compromised.' Outdoor therapy required.",
-  "Code coverage 99%, sunlight coverage 0%. Fix immediately outside.",
-  "Deploy successful: Oxygen to lungs. Confirm deployment outdoors.",
-  "Office chair uptime: 100%. Leg usage uptime: 0%. Balance required.",
-  "Vitamin D deficiency detected in testers. Execute 'Go Outside' test case.",
-  "The only bug-free environment is outdoors. Investigate immediately.",
-  "Edgars’ beard evolved sentience. Escort him outdoors.",
-  "Production incident: Your posture crashed. Emergency hotfix outside.",
-  "Git blame points directly at sedentary lifestyle. Refactor outdoors.",
-  "API response: 200ms. Sunlight response: infinity. Adjust latency outside.",
-  "Sprint retrospective: lack of sunlight is the root cause of all issues.",
-  "Deploy outdoors approved. Execute manual verification.",
-  "Server load normal. Mental load critical. Fresh-air reboot required.",
-  "Code review: Too many unused limbs. Optimize immediately outdoors.",
-  "QA found 50 bugs and your social life—both fixed by stepping outside.",
-  "Docs updated: 'Best practices include regular sunlight exposure.'",
-  "CRITICAL: Your sanity is deprecated. Update available outdoors.",
-  "BREAKING: Outdoors proven less buggy than your codebase. Confirm now."
+  "Works!!!",
 };
 
 void setup() {
