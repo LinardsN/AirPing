@@ -11,7 +11,7 @@ const char* password = "Simsons1982";
 const char* webhookUrl = "https://discord.com/api/webhooks/1355250299434172597/NERGOBYhZGbssnJx9O32151kHp3857ZBUMazs5PdFLEujspVOdNp3aj1RtEfMawYGrSM";
 
 // Firmware update URL (your uploaded .bin file)
-const char* firmwareUrl = "https://github.com/LinardsN/AirPing/raw/refs/heads/main/sketch_mar28a/build/esp32.esp32.esp32/sketch_mar28a.ino.bin";
+const char* firmwareUrl = "https://raw.githack.com/LinardsN/AirPing/refs/heads/main/sketch_mar28a/build/esp32.esp32.esp32/sketch_mar28a.ino.bin";
 
 // GPIO Definitions
 const gpio_num_t buttonPin = GPIO_NUM_13;
