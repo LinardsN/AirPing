@@ -26,7 +26,7 @@ const unsigned long debounceTime = 1000; // 1 sec debounce
 
 // Discord messages
 const char* messages[] = {
-  "ssssss"
+  "WORKS!!"
 };
 
 unsigned long lastPressTime = 0;
