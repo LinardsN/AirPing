@@ -24,9 +24,7 @@ const unsigned long debounceTime = 1000;
 
 // Discord Messages
 const char* messages[] = {
-  "Build failed: Your vitamin D levels are below acceptable thresholds. Go debug outside.",
-  "Edgars merged his sanity to master by mistake. Take him outside quickly.",
-  "Linards' bug count exceeded available integers. Reset him outside."
+  "WORKS!"
 };
 
 unsigned long lastPressTime = 0;
@@ -111,7 +109,7 @@ void performOTAUpdate() {
 
   Serial.println("🔄 Checking OTA update...");
 
-  t_httpUpdate_return ret = httpUpdate.update(client, firmwareUrl);
+  t_httpUpdate_return ret = httpUpdate.update(client, firmwareUrl, "1.0"); // <-- Version here clearly
 
   switch (ret) {
     case HTTP_UPDATE_FAILED:
@@ -128,6 +126,7 @@ void performOTAUpdate() {
       break;
   }
 }
+
 
 void enterDeepSleep() {
   Serial.println("💤 Deep sleep now...");
