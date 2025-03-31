@@ -66,17 +66,29 @@ void loop() {
 }
 
 // === CONNECT TO WIFI (retry until success) ===
+// === CONNECT TO WIFI (retry with timeout) ===
 void connectWiFi() {
   WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi (no timeout)");
+  Serial.print("Connecting to WiFi");
 
-  while (WiFi.status() != WL_CONNECTED) {
+  int retries = 0;
+  const int maxRetries = 20;
+
+  while (WiFi.status() != WL_CONNECTED && retries < maxRetries) {
     delay(500);
     Serial.print(".");
+    retries++;
   }
 
-  Serial.printf("\n✅ WiFi connected! Signal strength: %d dBm\n", WiFi.RSSI());
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.printf("\n✅ WiFi connected! Signal strength: %d dBm\n", WiFi.RSSI());
+    delay(1000); // Wait 1s to ensure full connection stability before sending HTTP
+  } else {
+    Serial.println("\n❌ Failed to connect to WiFi. Going to sleep...");
+    enterDeepSleep(); // Optional: fallback to sleep if WiFi fails
+  }
 }
+
 
 // === FETCH MESSAGES WITH RETRY ===
 void fetchMessages() {
