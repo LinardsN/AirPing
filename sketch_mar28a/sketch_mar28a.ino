@@ -18,6 +18,7 @@ const char* messagesUrl = "https://raw.githack.com/LinardsN/AirPing/main/sketch_
 const gpio_num_t buttonPin = GPIO_NUM_13;
 String messages[200];
 int messageCount = 0;
+const unsigned long cooldownMillis = 15UL * 60UL * 1000UL; // 15 minutes in milliseconds
 
 void setup() {
   Serial.begin(115200);
@@ -31,15 +32,23 @@ void setup() {
   bool wokeFromButton = (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0);
   bool maintenanceMode = !wokeFromButton && digitalRead(buttonPin) == LOW;
 
-  if (wokeFromButton) {
-    Serial.println("🔘 Wake from deep sleep by button press.");
-    if (connectWiFi()) {
-      sendDiscordMessage();
-    } else {
-      Serial.println("❌ WiFi not connected. Skipping message.");
+if (wokeFromButton) {
+  Serial.println("🔘 Wake from deep sleep by button press.");
+  unsigned long now = millis();
+  unsigned long lastSent = prefs.getULong("lastSent", 0);
+
+  if ((now - lastSent < cooldownMillis) && lastSent != 0) {
+    Serial.println("⏳ Cooldown active. Not sending message.");
+  } else {
+    connectWiFi();
+    if (sendDiscordMessage()) {
+      prefs.putULong("lastSent", millis());
     }
-    enterDeepSleep();
   }
+
+  enterDeepSleep();
+}
+
   else if (maintenanceMode) {
     Serial.println("🛠️ Maintenance mode (button held at boot): Fetching messages + OTA...");
     if (connectWiFi()) {
