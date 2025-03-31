@@ -19,7 +19,6 @@ const gpio_num_t buttonPin = GPIO_NUM_13;
 String messages[200];
 int messageCount = 0;
 
-// === SETUP ===
 void setup() {
   Serial.begin(115200);
   pinMode(buttonPin, INPUT_PULLUP);
@@ -62,7 +61,7 @@ void loop() {
   // unused
 }
 
-// === Wi-Fi CONNECTION ===
+// === CONNECT TO WIFI ===
 bool connectWiFi() {
   WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi...");
@@ -82,33 +81,53 @@ bool connectWiFi() {
   }
 }
 
-// === FETCH MESSAGES ===
+// === FETCH MESSAGES WITH RETRY ===
 void fetchMessages() {
   WiFiClientSecure client;
   client.setInsecure();
   HTTPClient https;
-  https.setTimeout(15000);
 
-  Serial.println("⬇️ Fetching messages...");
-  messageCount = 0;
+  const int timeoutMs = 15000;
+  const int maxRetries = 2;
+  int attempt = 0;
+  bool success = false;
 
-  if (https.begin(client, messagesUrl)) {
-    int httpCode = https.GET();
-    if (httpCode == HTTP_CODE_OK) {
-      String payload = https.getString();
-      parseMessages(payload);
-      Serial.printf("✅ Loaded %d messages.\n", messageCount);
+  while (attempt < maxRetries && !success) {
+    https.setTimeout(timeoutMs);
+    Serial.printf("⬇️ Fetching messages (attempt %d)...\n", attempt + 1);
+
+    if (https.begin(client, messagesUrl)) {
+      int httpCode = https.GET();
+
+      if (httpCode == HTTP_CODE_OK) {
+        String payload = https.getString();
+        parseMessages(payload);
+        Serial.printf("✅ Loaded %d messages.\n", messageCount);
+        success = true;
+      } else {
+        Serial.printf("❌ Fetch failed (HTTP %d)\n", httpCode);
+      }
+
+      https.end();
     } else {
-      Serial.printf("❌ Fetch messages failed (HTTP %d)\n", httpCode);
+      Serial.println("❌ HTTPS connection failed.");
     }
-    https.end();
-  } else {
-    Serial.println("❌ HTTPS connection failed.");
+
+    if (!success) {
+      attempt++;
+      if (attempt < maxRetries) {
+        delay(2000); // wait before retry
+        Serial.println("🔁 Retrying fetch...");
+      } else {
+        Serial.println("❌ All attempts to fetch messages failed.");
+      }
+    }
   }
 }
 
 void parseMessages(String payload) {
   int from = 0, to = 0;
+  messageCount = 0;
   while ((to = payload.indexOf('\n', from)) >= 0 && messageCount < 200) {
     messages[messageCount++] = payload.substring(from, to);
     from = to + 1;
@@ -118,7 +137,7 @@ void parseMessages(String payload) {
   }
 }
 
-// === SEND DISCORD MESSAGE ===
+// === SEND DISCORD MESSAGE WITH RETRY ===
 bool sendDiscordMessage() {
   if (messageCount == 0) {
     Serial.println("⚠️ No messages available to send.");
@@ -140,7 +159,7 @@ bool sendDiscordMessage() {
     return true;
   } else {
     Serial.printf("❌ Discord failed (HTTP %d). Retrying once...\n", response);
-    delay(2000); // short wait before retry
+    delay(2000);
     response = http.POST(payload);
     if (response > 0) {
       Serial.println("✅ Discord sent on retry.");
@@ -155,11 +174,11 @@ bool sendDiscordMessage() {
   return false;
 }
 
-// === OTA UPDATE ===
+// === OTA UPDATE WITH TIMEOUT ===
 void performOTAUpdate() {
   WiFiClientSecure client;
   client.setInsecure();
-  client.setTimeout(15000); // ✅ Proper timeout setting for OTA
+  client.setTimeout(15000); // Proper OTA timeout
 
   Serial.println("🔄 Checking for OTA update...");
   t_httpUpdate_return ret = httpUpdate.update(client, firmwareUrl, "1.0");
@@ -172,8 +191,7 @@ void performOTAUpdate() {
     Serial.printf("❌ OTA failed (%d): %s\n", httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str());
 }
 
-
-// === SLEEP ===
+// === DEEP SLEEP ===
 void enterDeepSleep() {
   esp_sleep_enable_ext0_wakeup(buttonPin, 0); // Wake on button press
   Serial.println("💤 Entering deep sleep...");
@@ -181,7 +199,7 @@ void enterDeepSleep() {
   esp_deep_sleep_start();
 }
 
-// === MESSAGE STORAGE ===
+// === STORE MESSAGES ===
 void saveMessages() {
   prefs.putInt("count", messageCount);
   for (int i = 0; i < messageCount; i++)
