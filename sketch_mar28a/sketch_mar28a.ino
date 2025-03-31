@@ -5,10 +5,10 @@
 #include "esp_sleep.h"
 
 // === CONFIGURATION ===
-const char* ssid = "Pretty-Fly-For-A-WiFi";
-const char* password = "Simsons1982";
+const char* ssid = "TestDevLab-Guest";
+const char* password = "ThinkQualityFirst";
 
-const char* webhookUrl = "https://discord.com/api/webhooks/1355250299434172597/NERGOBYhZGbssnJx9O32151kHp3857ZBUMazs5PdFLEujspVOdNp3aj1RtEfMawYGrSM";
+const char* webhookUrl = "https://discord.com/api/webhooks/1355142639048986684/RdtSC3huBSFZ2GA6rC5Gl3frSySLFpsSxrHCBINNybU9vjlxoaXE1Ee4okFnWHjcOY9V";
 const char* firmwareUrl = "https://raw.githubusercontent.com/LinardsN/AirPing/main/sketch_mar28a/build/esp32.esp32.esp32/sketch_mar28a.ino.bin";
 const char* messagesUrl = "https://raw.githack.com/LinardsN/AirPing/main/sketch_mar28a/messages.txt";
 const gpio_num_t buttonPin = GPIO_NUM_13;
