@@ -6,7 +6,7 @@
 
 // === CONFIGURATION ===
 const char* ssid = "TestDevLab-Guest";
-const char* password = "ThinkQualityFirst";
+const char* password = "";
 
 const char* webhookUrl = "https://discord.com/api/webhooks/1355142639048986684/RdtSC3huBSFZ2GA6rC5Gl3frSySLFpsSxrHCBINNybU9vjlxoaXE1Ee4okFnWHjcOY9V";
 const char* firmwareUrl = "https://raw.githubusercontent.com/LinardsN/AirPing/main/sketch_mar28a/build/esp32.esp32.esp32/sketch_mar28a.ino.bin";
