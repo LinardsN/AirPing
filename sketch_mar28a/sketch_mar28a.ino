@@ -28,12 +28,12 @@ void setup() {
   prefs.begin("airping", false);
   loadMessages();
 
-  bool maintenanceMode = digitalRead(buttonPin) == LOW;
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
+  bool wokeFromButton = (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0);
+  bool maintenanceMode = !wokeFromButton && digitalRead(buttonPin) == LOW;
 
-  if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0 && !maintenanceMode) {
-    // Regular button press: Send message
-    Serial.println("🔘 Button press from sleep: sending message...");
+  if (wokeFromButton) {
+    Serial.println("🔘 Woke from deep sleep by button: Sending Discord message...");
     if (connectWiFi()) {
       sendDiscordMessage();
     } else {
@@ -42,8 +42,7 @@ void setup() {
     enterDeepSleep();
   }
   else if (maintenanceMode) {
-    // Button held during boot: Maintenance mode
-    Serial.println("🛠️ Maintenance mode: Fetching messages and OTA...");
+    Serial.println("🛠️ Maintenance mode (button held at reset): Fetching messages + OTA...");
     if (connectWiFi()) {
       fetchMessages();
       saveMessages();
@@ -54,7 +53,6 @@ void setup() {
     enterDeepSleep();
   }
   else {
-    // Regular boot/reset with no button: sleep
     Serial.println("⏳ Normal boot/reset. Sleeping...");
     enterDeepSleep();
   }
