@@ -9,7 +9,7 @@ Preferences prefs;
 
 // === CONFIGURATION ===
 const char* ssid = "TestDevLab-Guest";
-const char* password = "ThinkQualityFirst";
+const char* password = "";
 
 const char* webhookUrl = "https://discord.com/api/webhooks/1355142639048986684/RdtSC3huBSFZ2GA6rC5Gl3frSySLFpsSxrHCBINNybU9vjlxoaXE1Ee4okFnWHjcOY9V";
 const char* firmwareUrl = "https://raw.githubusercontent.com/LinardsN/AirPing/main/sketch_mar28a/build/esp32.esp32.esp32/sketch_mar28a.ino.bin";
@@ -18,7 +18,8 @@ const char* messagesUrl = "https://raw.githack.com/LinardsN/AirPing/main/sketch_
 const gpio_num_t buttonPin = GPIO_NUM_13;
 String messages[200];
 int messageCount = 0;
-const unsigned long cooldownMillis = 15UL * 60UL * 1000UL; // 15 minutes in milliseconds
+const uint64_t cooldownMicros = 15ULL * 60ULL * 1000000ULL; // 15 minutes in microseconds
+
 
 void setup() {
   Serial.begin(115200);
@@ -34,20 +35,22 @@ void setup() {
 
 if (wokeFromButton) {
   Serial.println("🔘 Wake from deep sleep by button press.");
-  unsigned long now = millis();
-  unsigned long lastSent = prefs.getULong("lastSent", 0);
 
-  if ((now - lastSent < cooldownMillis) && lastSent != 0) {
-    Serial.println("⏳ Cooldown active. Not sending message.");
+  uint64_t nowMicros = esp_timer_get_time(); // microseconds since boot
+  uint64_t lastSent = prefs.getULong64("lastSent", 0);
+
+  if (lastSent != 0 && nowMicros - lastSent < cooldownMicros) {
+    Serial.printf("⏳ Cooldown active. Try again later.\n");
   } else {
     connectWiFi();
     if (sendDiscordMessage()) {
-      prefs.putULong("lastSent", millis());
+      prefs.putULong64("lastSent", nowMicros);
     }
   }
 
   enterDeepSleep();
 }
+
 
   else if (maintenanceMode) {
     Serial.println("🛠️ Maintenance mode (button held at boot): Fetching messages + OTA...");
