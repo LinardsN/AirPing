@@ -66,28 +66,44 @@ void loop() {
 }
 
 // === CONNECT TO WIFI (retry until success) ===
-// === CONNECT TO WIFI (retry with timeout) ===
 void connectWiFi() {
+  Serial.println("📡 Starting Wi-Fi connection...");
+  WiFi.disconnect(true);  // Clear previous state
+  delay(100);
+  WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi");
 
   int retries = 0;
-  const int maxRetries = 20;
-
-  while (WiFi.status() != WL_CONNECTED && retries < maxRetries) {
-    delay(500);
-    Serial.print(".");
+  while (WiFi.status() != WL_CONNECTED) {
     retries++;
+    delay(500);
+    Serial.printf("⏳ Connecting... (attempt %d) Status: %d\n", retries, WiFi.status());
+
+    if (retries > 60) {
+      Serial.println("❌ Still not connected after 30s, restarting WiFi stack...");
+      WiFi.disconnect();
+      delay(200);
+      WiFi.begin(ssid, password);
+      retries = 0;
+    }
   }
 
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.printf("\n✅ WiFi connected! Signal strength: %d dBm\n", WiFi.RSSI());
-    delay(1000); // Wait 1s to ensure full connection stability before sending HTTP
+  Serial.printf("✅ WiFi connected! IP: %s | Signal: %d dBm\n",
+                WiFi.localIP().toString().c_str(), WiFi.RSSI());
+  delay(1500); // Let things settle
+
+  // DNS Check
+  Serial.println("🌐 Testing DNS resolution for discord.com...");
+  IPAddress discordIP;
+  if (WiFi.hostByName("discord.com", discordIP)) {
+    Serial.printf("✅ DNS OK. Resolved IP: %s\n", discordIP.toString().c_str());
   } else {
-    Serial.println("\n❌ Failed to connect to WiFi. Going to sleep...");
-    enterDeepSleep(); // Optional: fallback to sleep if WiFi fails
+    Serial.println("❌ DNS resolution failed! Webhook may not work.");
   }
 }
+
+
+
 
 
 // === FETCH MESSAGES WITH RETRY ===
