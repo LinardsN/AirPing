@@ -9,7 +9,7 @@ Preferences prefs;
 
 // === CONFIGURATION ===
 const char* ssid = "TestDevLab-Guest";
-const char* password = "";
+const char* password = "ThinkQualityFirst";
 
 const char* webhookUrl = "https://discord.com/api/webhooks/1355142639048986684/RdtSC3huBSFZ2GA6rC5Gl3frSySLFpsSxrHCBINNybU9vjlxoaXE1Ee4okFnWHjcOY9V";
 const char* firmwareUrl = "https://raw.githubusercontent.com/LinardsN/AirPing/main/sketch_mar28a/build/esp32.esp32.esp32/sketch_mar28a.ino.bin";
@@ -33,7 +33,7 @@ void setup() {
   bool maintenanceMode = !wokeFromButton && digitalRead(buttonPin) == LOW;
 
   if (wokeFromButton) {
-    Serial.println("🔘 Woke from deep sleep by button: Sending Discord message...");
+    Serial.println("🔘 Wake from deep sleep by button press.");
     if (connectWiFi()) {
       sendDiscordMessage();
     } else {
@@ -42,7 +42,7 @@ void setup() {
     enterDeepSleep();
   }
   else if (maintenanceMode) {
-    Serial.println("🛠️ Maintenance mode (button held at reset): Fetching messages + OTA...");
+    Serial.println("🛠️ Maintenance mode (button held at boot): Fetching messages + OTA...");
     if (connectWiFi()) {
       fetchMessages();
       saveMessages();
@@ -62,8 +62,7 @@ void loop() {
   // unused
 }
 
-// === FUNCTIONS ===
-
+// === Wi-Fi CONNECTION ===
 bool connectWiFi() {
   WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi...");
@@ -75,7 +74,7 @@ bool connectWiFi() {
   }
 
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\n✅ WiFi connected!");
+    Serial.printf("\n✅ WiFi connected! Signal strength: %d dBm\n", WiFi.RSSI());
     return true;
   } else {
     Serial.println("\n⚠️ WiFi failed.");
@@ -83,10 +82,12 @@ bool connectWiFi() {
   }
 }
 
+// === FETCH MESSAGES ===
 void fetchMessages() {
   WiFiClientSecure client;
   client.setInsecure();
   HTTPClient https;
+  https.setTimeout(15000);
 
   Serial.println("⬇️ Fetching messages...");
   messageCount = 0;
@@ -117,31 +118,48 @@ void parseMessages(String payload) {
   }
 }
 
-void sendDiscordMessage() {
+// === SEND DISCORD MESSAGE ===
+bool sendDiscordMessage() {
   if (messageCount == 0) {
     Serial.println("⚠️ No messages available to send.");
-    return;
+    return false;
   }
 
   String content = "@here " + messages[random(messageCount)];
   HTTPClient http;
+  http.setTimeout(15000);
   http.begin(webhookUrl);
   http.addHeader("Content-Type", "application/json");
 
   String payload = "{\"content\":\"" + content + "\"}";
   int response = http.POST(payload);
 
-  if (response > 0)
+  if (response > 0) {
     Serial.println("✅ Discord sent: " + content);
-  else
-    Serial.printf("❌ Discord failed (HTTP %d)\n", response);
+    http.end();
+    return true;
+  } else {
+    Serial.printf("❌ Discord failed (HTTP %d). Retrying once...\n", response);
+    delay(2000); // short wait before retry
+    response = http.POST(payload);
+    if (response > 0) {
+      Serial.println("✅ Discord sent on retry.");
+      http.end();
+      return true;
+    } else {
+      Serial.printf("❌ Discord still failed (HTTP %d)\n", response);
+    }
+  }
 
   http.end();
+  return false;
 }
 
+// === OTA UPDATE ===
 void performOTAUpdate() {
   WiFiClientSecure client;
   client.setInsecure();
+  client.setTimeout(15000); // ✅ Proper timeout setting for OTA
 
   Serial.println("🔄 Checking for OTA update...");
   t_httpUpdate_return ret = httpUpdate.update(client, firmwareUrl, "1.0");
@@ -154,6 +172,8 @@ void performOTAUpdate() {
     Serial.printf("❌ OTA failed (%d): %s\n", httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str());
 }
 
+
+// === SLEEP ===
 void enterDeepSleep() {
   esp_sleep_enable_ext0_wakeup(buttonPin, 0); // Wake on button press
   Serial.println("💤 Entering deep sleep...");
@@ -161,6 +181,7 @@ void enterDeepSleep() {
   esp_deep_sleep_start();
 }
 
+// === MESSAGE STORAGE ===
 void saveMessages() {
   prefs.putInt("count", messageCount);
   for (int i = 0; i < messageCount; i++)
