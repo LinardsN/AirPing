@@ -7,7 +7,7 @@
 
 Preferences prefs;
 
-// CONFIGURATION
+// === CONFIGURATION ===
 const char* ssid = "TestDevLab-Guest";
 const char* password = "";
 
@@ -16,10 +16,10 @@ const char* firmwareUrl = "https://raw.githubusercontent.com/LinardsN/AirPing/ma
 const char* messagesUrl = "https://raw.githack.com/LinardsN/AirPing/main/sketch_mar28a/messages.txt";
 
 const gpio_num_t buttonPin = GPIO_NUM_13;
-
 String messages[200];
 int messageCount = 0;
 
+// === SETUP ===
 void setup() {
   Serial.begin(115200);
   pinMode(buttonPin, INPUT_PULLUP);
@@ -28,27 +28,34 @@ void setup() {
   prefs.begin("airping", false);
   loadMessages();
 
+  bool maintenanceMode = digitalRead(buttonPin) == LOW;
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
 
-  if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0) {
-    // Main button pressed: Send Discord message and sleep
-    Serial.println("🔘 Button pressed: Sending Discord message...");
-    connectWiFi();
-    sendDiscordMessage();
+  if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0 && !maintenanceMode) {
+    // Regular button press: Send message
+    Serial.println("🔘 Button press from sleep: sending message...");
+    if (connectWiFi()) {
+      sendDiscordMessage();
+    } else {
+      Serial.println("❌ WiFi not connected. Skipping message.");
+    }
     enterDeepSleep();
   }
-  else if (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED) {
-    // BOOT button pressed or Reset: Perform OTA and fetch messages
-    Serial.println("⚙️ Maintenance boot (BOOT button/reset). Fetching messages + OTA...");
-    connectWiFi();
-    fetchMessages();
-    saveMessages();
-    performOTAUpdate();
+  else if (maintenanceMode) {
+    // Button held during boot: Maintenance mode
+    Serial.println("🛠️ Maintenance mode: Fetching messages and OTA...");
+    if (connectWiFi()) {
+      fetchMessages();
+      saveMessages();
+      performOTAUpdate();
+    } else {
+      Serial.println("❌ WiFi failed. Skipping OTA & message fetch.");
+    }
     enterDeepSleep();
   }
   else {
-    // Any other boot: just sleep immediately
-    Serial.println("⏳ Normal boot. Sleeping immediately...");
+    // Regular boot/reset with no button: sleep
+    Serial.println("⏳ Normal boot/reset. Sleeping...");
     enterDeepSleep();
   }
 }
@@ -57,17 +64,25 @@ void loop() {
   // unused
 }
 
-// FUNCTIONS
+// === FUNCTIONS ===
 
-void connectWiFi() {
+bool connectWiFi() {
   WiFi.begin(ssid, password);
-  Serial.print("Connecting WiFi...");
-  unsigned long timeout = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - timeout < 10000) {
+  Serial.print("Connecting to WiFi...");
+  unsigned long startAttemptTime = millis();
+
+  while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 20000) {
     delay(500);
     Serial.print(".");
   }
-  Serial.println(WiFi.status() == WL_CONNECTED ? "\n✅ WiFi connected!" : "\n⚠️ WiFi failed!");
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\n✅ WiFi connected!");
+    return true;
+  } else {
+    Serial.println("\n⚠️ WiFi failed.");
+    return false;
+  }
 }
 
 void fetchMessages() {
@@ -106,7 +121,7 @@ void parseMessages(String payload) {
 
 void sendDiscordMessage() {
   if (messageCount == 0) {
-    Serial.println("⚠️ No messages stored!");
+    Serial.println("⚠️ No messages available to send.");
     return;
   }
 
@@ -130,19 +145,19 @@ void performOTAUpdate() {
   WiFiClientSecure client;
   client.setInsecure();
 
-  Serial.println("🔄 Checking OTA update...");
+  Serial.println("🔄 Checking for OTA update...");
   t_httpUpdate_return ret = httpUpdate.update(client, firmwareUrl, "1.0");
 
   if (ret == HTTP_UPDATE_OK)
     Serial.println("✅ OTA update successful!");
   else if (ret == HTTP_UPDATE_NO_UPDATES)
-    Serial.println("✅ Firmware up to date.");
+    Serial.println("✅ Firmware already up to date.");
   else
     Serial.printf("❌ OTA failed (%d): %s\n", httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str());
 }
 
 void enterDeepSleep() {
-  esp_sleep_enable_ext0_wakeup(buttonPin, 0);
+  esp_sleep_enable_ext0_wakeup(buttonPin, 0); // Wake on button press
   Serial.println("💤 Entering deep sleep...");
   delay(200);
   esp_deep_sleep_start();
@@ -152,7 +167,7 @@ void saveMessages() {
   prefs.putInt("count", messageCount);
   for (int i = 0; i < messageCount; i++)
     prefs.putString(("msg" + String(i)).c_str(), messages[i]);
-  Serial.println("💾 Messages saved to memory.");
+  Serial.println("💾 Messages saved.");
 }
 
 void loadMessages() {
