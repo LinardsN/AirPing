@@ -19,16 +19,6 @@ const gpio_num_t buttonPin = GPIO_NUM_13;
 String messages[200];
 int messageCount = 0;
 
-// === FORWARD DECLARATIONS ===
-void loadMessages();
-void saveMessages();
-void enterDeepSleep();
-void connectWiFi();
-void fetchMessages();
-void parseMessages(String payload);
-bool sendDiscordMessage();
-void performOTAUpdate();
-
 void setup() {
   Serial.begin(115200);
   pinMode(buttonPin, INPUT_PULLUP);
@@ -43,16 +33,22 @@ void setup() {
 
   if (wokeFromButton) {
     Serial.println("🔘 Wake from deep sleep by button press.");
-    connectWiFi();
-    sendDiscordMessage();
+    if (connectWiFi()) {
+      sendDiscordMessage();
+    } else {
+      Serial.println("❌ WiFi not connected. Skipping message.");
+    }
     enterDeepSleep();
   }
   else if (maintenanceMode) {
     Serial.println("🛠️ Maintenance mode (button held at boot): Fetching messages + OTA...");
-    connectWiFi();
-    fetchMessages();
-    saveMessages();
-    performOTAUpdate();
+    if (connectWiFi()) {
+      fetchMessages();
+      saveMessages();
+      performOTAUpdate();
+    } else {
+      Serial.println("❌ WiFi failed. Skipping OTA & message fetch.");
+    }
     enterDeepSleep();
   }
   else {
@@ -65,46 +61,25 @@ void loop() {
   // unused
 }
 
-// === CONNECT TO WIFI (retry until success) ===
-void connectWiFi() {
-  Serial.println("📡 Starting Wi-Fi connection...");
-  WiFi.disconnect(true);  // Clear previous state
-  delay(100);
-  WiFi.mode(WIFI_STA);
+// === CONNECT TO WIFI ===
+bool connectWiFi() {
   WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi...");
+  unsigned long startAttemptTime = millis();
 
-  int retries = 0;
-  while (WiFi.status() != WL_CONNECTED) {
-    retries++;
+  while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 20000) {
     delay(500);
-    Serial.printf("⏳ Connecting... (attempt %d) Status: %d\n", retries, WiFi.status());
-
-    if (retries > 60) {
-      Serial.println("❌ Still not connected after 30s, restarting WiFi stack...");
-      WiFi.disconnect();
-      delay(200);
-      WiFi.begin(ssid, password);
-      retries = 0;
-    }
+    Serial.print(".");
   }
 
-  Serial.printf("✅ WiFi connected! IP: %s | Signal: %d dBm\n",
-                WiFi.localIP().toString().c_str(), WiFi.RSSI());
-  delay(1500); // Let things settle
-
-  // DNS Check
-  Serial.println("🌐 Testing DNS resolution for discord.com...");
-  IPAddress discordIP;
-  if (WiFi.hostByName("discord.com", discordIP)) {
-    Serial.printf("✅ DNS OK. Resolved IP: %s\n", discordIP.toString().c_str());
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.printf("\n✅ WiFi connected! Signal strength: %d dBm\n", WiFi.RSSI());
+    return true;
   } else {
-    Serial.println("❌ DNS resolution failed! Webhook may not work.");
+    Serial.println("\n⚠️ WiFi failed.");
+    return false;
   }
 }
-
-
-
-
 
 // === FETCH MESSAGES WITH RETRY ===
 void fetchMessages() {
@@ -141,7 +116,7 @@ void fetchMessages() {
     if (!success) {
       attempt++;
       if (attempt < maxRetries) {
-        delay(2000);
+        delay(2000); // wait before retry
         Serial.println("🔁 Retrying fetch...");
       } else {
         Serial.println("❌ All attempts to fetch messages failed.");
@@ -150,7 +125,6 @@ void fetchMessages() {
   }
 }
 
-// === PARSE MESSAGES ===
 void parseMessages(String payload) {
   int from = 0, to = 0;
   messageCount = 0;
@@ -163,7 +137,7 @@ void parseMessages(String payload) {
   }
 }
 
-// === SEND DISCORD MESSAGE (RETRY UNTIL SUCCESS) ===
+// === SEND DISCORD MESSAGE WITH RETRY ===
 bool sendDiscordMessage() {
   if (messageCount == 0) {
     Serial.println("⚠️ No messages available to send.");
@@ -171,33 +145,40 @@ bool sendDiscordMessage() {
   }
 
   String content = "@here " + messages[random(messageCount)];
+  HTTPClient http;
+  http.setTimeout(15000);
+  http.begin(webhookUrl);
+  http.addHeader("Content-Type", "application/json");
+
   String payload = "{\"content\":\"" + content + "\"}";
+  int response = http.POST(payload);
 
-  while (true) {
-    HTTPClient http;
-    http.setTimeout(15000);
-    http.begin(webhookUrl);
-    http.addHeader("Content-Type", "application/json");
-
-    int response = http.POST(payload);
-
+  if (response > 0) {
+    Serial.println("✅ Discord sent: " + content);
+    http.end();
+    return true;
+  } else {
+    Serial.printf("❌ Discord failed (HTTP %d). Retrying once...\n", response);
+    delay(2000);
+    response = http.POST(payload);
     if (response > 0) {
-      Serial.println("✅ Discord sent: " + content);
+      Serial.println("✅ Discord sent on retry.");
       http.end();
       return true;
     } else {
-      Serial.printf("❌ Discord failed (HTTP %d). Retrying in 2s...\n", response);
-      http.end();
-      delay(2000);
+      Serial.printf("❌ Discord still failed (HTTP %d)\n", response);
     }
   }
+
+  http.end();
+  return false;
 }
 
-// === OTA UPDATE ===
+// === OTA UPDATE WITH TIMEOUT ===
 void performOTAUpdate() {
   WiFiClientSecure client;
   client.setInsecure();
-  client.setTimeout(15000);
+  client.setTimeout(15000); // Proper OTA timeout
 
   Serial.println("🔄 Checking for OTA update...");
   t_httpUpdate_return ret = httpUpdate.update(client, firmwareUrl, "1.0");
@@ -212,13 +193,13 @@ void performOTAUpdate() {
 
 // === DEEP SLEEP ===
 void enterDeepSleep() {
-  esp_sleep_enable_ext0_wakeup(buttonPin, 0);
+  esp_sleep_enable_ext0_wakeup(buttonPin, 0); // Wake on button press
   Serial.println("💤 Entering deep sleep...");
   delay(200);
   esp_deep_sleep_start();
 }
 
-// === STORE & LOAD MESSAGES ===
+// === STORE MESSAGES ===
 void saveMessages() {
   prefs.putInt("count", messageCount);
   for (int i = 0; i < messageCount; i++)
