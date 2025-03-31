@@ -19,6 +19,16 @@ const gpio_num_t buttonPin = GPIO_NUM_13;
 String messages[200];
 int messageCount = 0;
 
+// === FORWARD DECLARATIONS ===
+void loadMessages();
+void saveMessages();
+void enterDeepSleep();
+void connectWiFi();
+void fetchMessages();
+void parseMessages(String payload);
+bool sendDiscordMessage();
+void performOTAUpdate();
+
 void setup() {
   Serial.begin(115200);
   pinMode(buttonPin, INPUT_PULLUP);
@@ -55,7 +65,7 @@ void loop() {
   // unused
 }
 
-// === CONNECT TO WIFI (no LED) ===
+// === CONNECT TO WIFI (retry until success) ===
 void connectWiFi() {
   WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi (no timeout)");
@@ -112,6 +122,7 @@ void fetchMessages() {
   }
 }
 
+// === PARSE MESSAGES ===
 void parseMessages(String payload) {
   int from = 0, to = 0;
   messageCount = 0;
@@ -124,7 +135,7 @@ void parseMessages(String payload) {
   }
 }
 
-// === SEND DISCORD MESSAGE WITH RETRY ===
+// === SEND DISCORD MESSAGE (RETRY UNTIL SUCCESS) ===
 bool sendDiscordMessage() {
   if (messageCount == 0) {
     Serial.println("⚠️ No messages available to send.");
@@ -132,36 +143,29 @@ bool sendDiscordMessage() {
   }
 
   String content = "@here " + messages[random(messageCount)];
-  HTTPClient http;
-  http.setTimeout(15000);
-  http.begin(webhookUrl);
-  http.addHeader("Content-Type", "application/json");
-
   String payload = "{\"content\":\"" + content + "\"}";
-  int response = http.POST(payload);
 
-  if (response > 0) {
-    Serial.println("✅ Discord sent: " + content);
-    http.end();
-    return true;
-  } else {
-    Serial.printf("❌ Discord failed (HTTP %d). Retrying once...\n", response);
-    delay(2000);
-    response = http.POST(payload);
+  while (true) {
+    HTTPClient http;
+    http.setTimeout(15000);
+    http.begin(webhookUrl);
+    http.addHeader("Content-Type", "application/json");
+
+    int response = http.POST(payload);
+
     if (response > 0) {
-      Serial.println("✅ Discord sent on retry.");
+      Serial.println("✅ Discord sent: " + content);
       http.end();
       return true;
     } else {
-      Serial.printf("❌ Discord still failed (HTTP %d)\n", response);
+      Serial.printf("❌ Discord failed (HTTP %d). Retrying in 2s...\n", response);
+      http.end();
+      delay(2000);
     }
   }
-
-  http.end();
-  return false;
 }
 
-// === OTA UPDATE WITH TIMEOUT ===
+// === OTA UPDATE ===
 void performOTAUpdate() {
   WiFiClientSecure client;
   client.setInsecure();
@@ -186,7 +190,7 @@ void enterDeepSleep() {
   esp_deep_sleep_start();
 }
 
-// === MESSAGE STORAGE ===
+// === STORE & LOAD MESSAGES ===
 void saveMessages() {
   prefs.putInt("count", messageCount);
   for (int i = 0; i < messageCount; i++)
