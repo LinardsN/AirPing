@@ -33,22 +33,16 @@ void setup() {
 
   if (wokeFromButton) {
     Serial.println("🔘 Wake from deep sleep by button press.");
-    if (connectWiFi()) {
-      sendDiscordMessage();
-    } else {
-      Serial.println("❌ WiFi not connected. Skipping message.");
-    }
+    connectWiFi();
+    sendDiscordMessage();
     enterDeepSleep();
   }
   else if (maintenanceMode) {
     Serial.println("🛠️ Maintenance mode (button held at boot): Fetching messages + OTA...");
-    if (connectWiFi()) {
-      fetchMessages();
-      saveMessages();
-      performOTAUpdate();
-    } else {
-      Serial.println("❌ WiFi failed. Skipping OTA & message fetch.");
-    }
+    connectWiFi();
+    fetchMessages();
+    saveMessages();
+    performOTAUpdate();
     enterDeepSleep();
   }
   else {
@@ -61,24 +55,17 @@ void loop() {
   // unused
 }
 
-// === CONNECT TO WIFI ===
-bool connectWiFi() {
+// === CONNECT TO WIFI (no LED) ===
+void connectWiFi() {
   WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi...");
-  unsigned long startAttemptTime = millis();
+  Serial.print("Connecting to WiFi (no timeout)");
 
-  while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 20000) {
+  while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
 
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.printf("\n✅ WiFi connected! Signal strength: %d dBm\n", WiFi.RSSI());
-    return true;
-  } else {
-    Serial.println("\n⚠️ WiFi failed.");
-    return false;
-  }
+  Serial.printf("\n✅ WiFi connected! Signal strength: %d dBm\n", WiFi.RSSI());
 }
 
 // === FETCH MESSAGES WITH RETRY ===
@@ -116,7 +103,7 @@ void fetchMessages() {
     if (!success) {
       attempt++;
       if (attempt < maxRetries) {
-        delay(2000); // wait before retry
+        delay(2000);
         Serial.println("🔁 Retrying fetch...");
       } else {
         Serial.println("❌ All attempts to fetch messages failed.");
@@ -178,7 +165,7 @@ bool sendDiscordMessage() {
 void performOTAUpdate() {
   WiFiClientSecure client;
   client.setInsecure();
-  client.setTimeout(15000); // Proper OTA timeout
+  client.setTimeout(15000);
 
   Serial.println("🔄 Checking for OTA update...");
   t_httpUpdate_return ret = httpUpdate.update(client, firmwareUrl, "1.0");
@@ -193,13 +180,13 @@ void performOTAUpdate() {
 
 // === DEEP SLEEP ===
 void enterDeepSleep() {
-  esp_sleep_enable_ext0_wakeup(buttonPin, 0); // Wake on button press
+  esp_sleep_enable_ext0_wakeup(buttonPin, 0);
   Serial.println("💤 Entering deep sleep...");
   delay(200);
   esp_deep_sleep_start();
 }
 
-// === STORE MESSAGES ===
+// === MESSAGE STORAGE ===
 void saveMessages() {
   prefs.putInt("count", messageCount);
   for (int i = 0; i < messageCount; i++)
