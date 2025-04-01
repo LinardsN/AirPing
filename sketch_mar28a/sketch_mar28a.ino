@@ -10,7 +10,7 @@ Preferences prefs;
 
 // === CONFIGURATION ===
 const char* ssid = "TestDevLab-Guest";
-const char* password = "ThinkQualityFirst";
+const char* password = "";
 
 const char* webhookUrl = "https://discord.com/api/webhooks/1355142639048986684/RdtSC3huBSFZ2GA6rC5Gl3frSySLFpsSxrHCBINNybU9vjlxoaXE1Ee4okFnWHjcOY9V";
 const char* maintenanceWebhookUrl = "https://discord.com/api/webhooks/1356533458519724032/Yk-EVARE1Y_mU1YVANwETHQocCJBQhMf4Bq30Pr3PqqZmAXu_n7qEyH4AMR9obCk2GsS";
@@ -39,10 +39,10 @@ void setup() {
   bool wokeFromButton = (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0);
   bool maintenanceMode = !wokeFromButton && digitalRead(buttonPin) == LOW;
 
-  log("\uD83D\uDCC2 Loaded " + String(messageCount) + " messages from memory.");
+  log("📂 Loaded " + String(messageCount) + " messages from memory.");
 
   if (wokeFromButton) {
-    log("\uD83D\uDD18 Wake from deep sleep by button press.");
+    log("🔘 Wake from deep sleep by button press.");
     connectWiFi();
     syncTime();
 
@@ -54,31 +54,31 @@ void setup() {
         prefs.putULong("lastSent", now);
         pressCount++;
         prefs.putULong("pressCount", pressCount);
-        log("\u2705 Public message sent. Total calls outside: " + String(pressCount));
+        log("✅ Public message sent. Total calls outside: " + String(pressCount));
 
         checkForRemoteUpdate();
       } else {
-        log("\u274C Failed to send public message.");
+        log("❌ Failed to send public message.");
       }
     } else {
       unsigned long remaining = cooldownSeconds - (now - lastSent);
       unsigned long minutes = remaining / 60;
       unsigned long seconds = remaining % 60;
-      log("\u23F3 Cooldown active: " + String(minutes) + "m " + String(seconds) + "s remaining.");
+      log("⏳ Cooldown active: " + String(minutes) + "m " + String(seconds) + "s remaining.");
     }
 
     enterDeepSleep();
   } else if (maintenanceMode) {
-    log("\uD83D\uDEE0\uFE0F Maintenance mode (button held at boot): Fetching messages + OTA...");
+    log("🛠️ Maintenance mode (button held at boot): Fetching messages + OTA...");
     connectWiFi();
     syncTime();
     fetchMessages();
     saveMessages();
-    log("\uD83D\uDCC5 Fetched and saved messages.");
+    log("📅 Fetched and saved messages.");
     performOTAUpdate();
     enterDeepSleep();
   } else {
-    log("\u23F3 Normal boot/reset. Sleeping...");
+    log("⏳ Normal boot/reset. Sleeping...");
     enterDeepSleep();
   }
 }
@@ -93,7 +93,7 @@ void connectWiFi() {
     Serial.print(".");
   }
   isWiFiReady = true;
-  log("\n\u2705 WiFi connected! RSSI: " + String(WiFi.RSSI()));
+  log("\n✅ WiFi connected! RSSI: " + String(WiFi.RSSI()));
 }
 
 void syncTime() {
@@ -105,8 +105,8 @@ void syncTime() {
     now = time(nullptr);
     retries++;
   }
-  if (now > 100000) log("\uD83D\uDD52 Time synced: " + String(ctime(&now)));
-  else log("\u274C Failed to sync time.");
+  if (now > 100000) log("🕒 Time synced: " + String(ctime(&now)));
+  else log("❌ Failed to sync time.");
 }
 
 bool sendDiscordMessage() {
@@ -206,6 +206,29 @@ void loadMessages() {
     messages[i] = prefs.getString(("msg" + String(i)).c_str(), "");
 }
 
+void fetchMessages() {
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient https;
+  const int timeoutMs = 15000;
+  https.setTimeout(timeoutMs);
+  log("🌐 Fetching messages from GitHub...");
+
+  if (https.begin(client, stateJsonUrl)) {
+    int httpCode = https.GET();
+    if (httpCode == HTTP_CODE_OK) {
+      String payload = https.getString();
+      // You can add message parsing here if needed
+      log("✅ Successfully fetched state JSON.");
+    } else {
+      log("❌ Failed to fetch messages (HTTP " + String(httpCode) + ")");
+    }
+    https.end();
+  } else {
+    log("❌ HTTPS connection failed while fetching messages.");
+  }
+}
+
 void log(String msg) {
   String versioned = firmwareVersion + " | " + msg;
   Serial.println(msg);
@@ -216,7 +239,7 @@ void log(String msg) {
   http.setTimeout(10000);
   http.begin(maintenanceWebhookUrl);
   http.addHeader("Content-Type", "application/json");
-  String payload = "{\"content\":\"\uD83D\uDEE0\uFE0F " + versioned + "\"}";
+  String payload = "{\"content\":\"🛠️ " + versioned + "\"}";
   http.POST(payload);
   http.end();
 }
