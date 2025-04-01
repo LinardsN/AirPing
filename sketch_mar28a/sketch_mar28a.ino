@@ -20,7 +20,7 @@ const char* remoteVersionUrl = "https://raw.githubusercontent.com/LinardsN/AirPi
 const gpio_num_t buttonPin = GPIO_NUM_13;
 const unsigned long cooldownSeconds = 15 * 60;
 
-String firmwareVersion = "v20250401-1219";
+String firmwareVersion = "v20250401-1417";
 String messages[200];
 int messageCount = 0;
 bool isWiFiReady = false;
@@ -46,27 +46,35 @@ void setup() {
     connectWiFi();
     syncTime();
 
+    int pressCountThisSession = detectPresses(3000); // wait 3 seconds for press counting
     time_t now = time(nullptr);
     time_t lastSent = prefs.getULong("lastSent", 0);
 
-    if (lastSent == 0 || now - lastSent >= cooldownSeconds) {
-      if (sendDiscordMessage()) {
-        prefs.putULong("lastSent", now);
-        pressCount++;
-        prefs.putULong("pressCount", pressCount);
-        log("✅ Public message sent. Total calls outside: " + String(pressCount));
+    if (pressCountThisSession == 1) {
+      if (lastSent == 0 || now - lastSent >= cooldownSeconds) {
+        if (sendDiscordMessage(1)) {
+          prefs.putULong("lastSent", now);
+          pressCount++;
+          prefs.putULong("pressCount", pressCount);
+          log("✅ Public message sent. Total calls outside: " + String(pressCount));
+        } else {
+          log("❌ Failed to send public message.");
+        }
       } else {
-        log("❌ Failed to send public message.");
+        unsigned long remaining = cooldownSeconds - (now - lastSent);
+        unsigned long minutes = remaining / 60;
+        unsigned long seconds = remaining % 60;
+        log("⏳ Cooldown active: " + String(minutes) + "m " + String(seconds) + "s remaining.");
       }
-    } else {
-      unsigned long remaining = cooldownSeconds - (now - lastSent);
-      unsigned long minutes = remaining / 60;
-      unsigned long seconds = remaining % 60;
-      log("⏳ Cooldown active: " + String(minutes) + "m " + String(seconds) + "s remaining.");
+    } else if (pressCountThisSession == 2) {
+      sendDiscordMessage(2); // coffee
+    } else if (pressCountThisSession >= 3) {
+      sendDiscordMessage(3); // lunch
     }
 
     checkForRemoteUpdate();
     enterDeepSleep();
+
   } else if (maintenanceMode) {
     log("🛠️ Maintenance mode (button held at boot): Fetching messages + OTA...");
     connectWiFi();
@@ -83,6 +91,24 @@ void setup() {
 }
 
 void loop() {}
+
+int detectPresses(int windowMs) {
+  int count = 1;
+  unsigned long start = millis();
+  bool released = false;
+
+  while (millis() - start < windowMs) {
+    if (digitalRead(buttonPin) == HIGH) released = true;
+    if (released && digitalRead(buttonPin) == LOW) {
+      count++;
+      released = false;
+      log("🔁 Detected additional press. Count: " + String(count));
+      delay(200); // debounce delay
+    }
+  }
+  log("🔢 Total presses detected: " + String(count));
+  return count;
+}
 
 void connectWiFi() {
   WiFi.begin(ssid, password);
@@ -108,12 +134,20 @@ void syncTime() {
   else log("❌ Failed to sync time.");
 }
 
-bool sendDiscordMessage() {
-  if (messageCount == 0) {
-    log("⚠️ No messages available to send.");
-    return false;
+bool sendDiscordMessage(int type) {
+  String content;
+  if (type == 1) {
+    if (messageCount == 0) {
+      log("⚠️ No messages available to send.");
+      return false;
+    }
+    content = "@here " + messages[random(messageCount)];
+  } else if (type == 2) {
+    content = "@here ☕ Coffee break!";
+  } else if (type == 3) {
+    content = "@here 🍔 Lunch time!";
   }
-  String content = "@here " + messages[random(messageCount)];
+
   String payload = "{\"content\":\"" + content + "\"}";
 
   while (true) {
