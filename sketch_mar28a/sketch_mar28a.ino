@@ -22,7 +22,7 @@ const unsigned long cooldown1 = 15 * 60;
 const unsigned long cooldown2 = 10 * 60;
 const unsigned long cooldown3 = 30 * 60;
 
-String firmwareVersion = "v20250401-1457";
+String firmwareVersion = "v20250401-1520";
 String messages[200];
 int messageCount = 0;
 bool isWiFiReady = false;
@@ -56,7 +56,7 @@ void setup() {
         pressCountThisSession++;
         released = false;
         log("🔁 Detected additional press. Count: " + String(pressCountThisSession));
-        delay(200);
+        delay(1000);
       }
     }
     log("🔢 Total presses detected: " + String(pressCountThisSession));
