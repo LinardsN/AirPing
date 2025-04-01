@@ -22,7 +22,7 @@ const unsigned long cooldown1 = 15 * 60;
 const unsigned long cooldown2 = 10 * 60;
 const unsigned long cooldown3 = 30 * 60;
 
-String firmwareVersion = "v20250401-1520";
+String firmwareVersion = "v20250401-1529";
 String messages[200];
 int messageCount = 0;
 bool isWiFiReady = false;
@@ -45,6 +45,8 @@ void setup() {
 
   if (wokeFromButton) {
     log("🔘 Wake from deep sleep by button press.");
+
+    delay(1000);
 
     // Start press counting immediately
     unsigned long pressStart = millis();
