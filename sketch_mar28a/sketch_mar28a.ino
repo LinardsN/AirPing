@@ -10,12 +10,12 @@ Preferences prefs;
 
 // === CONFIGURATION ===
 const char* ssid = "TestDevLab-Guest";
-const char* password = "";
+const char* password = "ThinkQualityFirst";
 
 const char* webhookUrl = "https://discord.com/api/webhooks/1355142639048986684/RdtSC3huBSFZ2GA6rC5Gl3frSySLFpsSxrHCBINNybU9vjlxoaXE1Ee4okFnWHjcOY9V";
 const char* maintenanceWebhookUrl = "https://discord.com/api/webhooks/1356533458519724032/Yk-EVARE1Y_mU1YVANwETHQocCJBQhMf4Bq30Pr3PqqZmAXu_n7qEyH4AMR9obCk2GsS";
 const char* firmwareUrl = "https://raw.githubusercontent.com/LinardsN/AirPing/main/sketch_mar28a/build/esp32.esp32.esp32/sketch_mar28a.ino.bin";
-const char* stateJsonUrl = "https://raw.githubusercontent.com/LinardsN/AirPing/main/sketch_mar28a/version.json";
+const char* remoteVersionUrl = "https://raw.githubusercontent.com/LinardsN/AirPing/main/firmware_version.txt";
 
 const gpio_num_t buttonPin = GPIO_NUM_13;
 const unsigned long cooldownSeconds = 15 * 60;
