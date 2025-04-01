@@ -18,9 +18,11 @@ const char* firmwareUrl = "https://raw.githubusercontent.com/LinardsN/AirPing/ma
 const char* remoteVersionUrl = "https://raw.githubusercontent.com/LinardsN/AirPing/main/version.txt";
 
 const gpio_num_t buttonPin = GPIO_NUM_13;
-const unsigned long cooldownSeconds = 15 * 60;
+const unsigned long cooldown1 = 15 * 60;
+const unsigned long cooldown2 = 10 * 60;
+const unsigned long cooldown3 = 30 * 60;
 
-String firmwareVersion = "v20250401-1417";
+String firmwareVersion = "v20250401-1423";
 String messages[200];
 int messageCount = 0;
 bool isWiFiReady = false;
@@ -44,16 +46,18 @@ void setup() {
   if (wokeFromButton) {
     log("🔘 Wake from deep sleep by button press.");
     connectWiFi();
+    configTime(2 * 3600, 0, "pool.ntp.org", "time.nist.gov");  // Latvia/Riga is UTC+2
     syncTime();
 
-    int pressCountThisSession = detectPresses(3000); // wait 3 seconds for press counting
+    int pressCountThisSession = detectPresses(3000);
     time_t now = time(nullptr);
-    time_t lastSent = prefs.getULong("lastSent", 0);
+    struct tm* timeinfo = localtime(&now);
 
     if (pressCountThisSession == 1) {
-      if (lastSent == 0 || now - lastSent >= cooldownSeconds) {
+      time_t lastSent = prefs.getULong("lastSent1", 0);
+      if (lastSent == 0 || now - lastSent >= cooldown1) {
         if (sendDiscordMessage(1)) {
-          prefs.putULong("lastSent", now);
+          prefs.putULong("lastSent1", now);
           pressCount++;
           prefs.putULong("pressCount", pressCount);
           log("✅ Public message sent. Total calls outside: " + String(pressCount));
@@ -61,15 +65,35 @@ void setup() {
           log("❌ Failed to send public message.");
         }
       } else {
-        unsigned long remaining = cooldownSeconds - (now - lastSent);
-        unsigned long minutes = remaining / 60;
-        unsigned long seconds = remaining % 60;
-        log("⏳ Cooldown active: " + String(minutes) + "m " + String(seconds) + "s remaining.");
+        unsigned long remaining = cooldown1 - (now - lastSent);
+        log("⏳ Cooldown (1 press): " + String(remaining / 60) + "m " + String(remaining % 60) + "s");
       }
     } else if (pressCountThisSession == 2) {
-      sendDiscordMessage(2); // coffee
+      time_t lastSent = prefs.getULong("lastSent2", 0);
+      if (lastSent == 0 || now - lastSent >= cooldown2) {
+        if (sendDiscordMessage(2)) {
+          prefs.putULong("lastSent2", now);
+          log("☕ Coffee message sent.");
+        }
+      } else {
+        unsigned long remaining = cooldown2 - (now - lastSent);
+        log("⏳ Cooldown (2 presses): " + String(remaining / 60) + "m " + String(remaining % 60) + "s");
+      }
     } else if (pressCountThisSession >= 3) {
-      sendDiscordMessage(3); // lunch
+      if (timeinfo->tm_hour == 11 && timeinfo->tm_min >= 30 || timeinfo->tm_hour == 12 && timeinfo->tm_min <= 30) {
+        time_t lastSent = prefs.getULong("lastSent3", 0);
+        if (lastSent == 0 || now - lastSent >= cooldown3) {
+          if (sendDiscordMessage(3)) {
+            prefs.putULong("lastSent3", now);
+            log("🍔 Lunch message sent.");
+          }
+        } else {
+          unsigned long remaining = cooldown3 - (now - lastSent);
+          log("⏳ Cooldown (3+ presses): " + String(remaining / 60) + "m " + String(remaining % 60) + "s");
+        }
+      } else {
+        log("❌ Lunch message can only be sent between 11:30 and 12:30 (Latvia/Riga).");
+      }
     }
 
     checkForRemoteUpdate();
@@ -90,7 +114,25 @@ void setup() {
   }
 }
 
-void loop() {}
+void log(String msg) {
+  time_t now = time(nullptr);
+  struct tm* timeinfo = localtime(&now);
+  char timeStr[30];
+  strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", timeinfo);
+
+  String versioned = firmwareVersion + " | " + msg + " (" + String(timeStr) + ")";
+  Serial.println(versioned);
+
+  if (!isWiFiReady || WiFi.status() != WL_CONNECTED) return;
+
+  HTTPClient http;
+  http.setTimeout(10000);
+  http.begin(maintenanceWebhookUrl);
+  http.addHeader("Content-Type", "application/json");
+  String payload = "{\"content\":\"🛠️ " + versioned + "\"}";
+  http.POST(payload);
+  http.end();
+}
 
 int detectPresses(int windowMs) {
   int count = 1;
@@ -122,7 +164,6 @@ void connectWiFi() {
 }
 
 void syncTime() {
-  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
   time_t now = time(nullptr);
   int retries = 0;
   while (now < 100000 && retries < 20) {
@@ -254,18 +295,6 @@ void fetchMessages() {
     log("❌ HTTPS connection failed while fetching messages.");
   }
 }
-
-void log(String msg) {
-  String versioned = firmwareVersion + " | " + msg;
-  Serial.println(msg);
-
-  if (!isWiFiReady || WiFi.status() != WL_CONNECTED) return;
-
-  HTTPClient http;
-  http.setTimeout(10000);
-  http.begin(maintenanceWebhookUrl);
-  http.addHeader("Content-Type", "application/json");
-  String payload = "{\"content\":\"🛠️ " + versioned + "\"}";
-  http.POST(payload);
-  http.end();
+void loop() {
+  // Not used, since everything is done in setup()
 }
