@@ -22,7 +22,7 @@ const unsigned long cooldown1 = 15 * 60;
 const unsigned long cooldown2 = 10 * 60;
 const unsigned long cooldown3 = 30 * 60;
 
-String firmwareVersion = "v20250401-1533";
+String firmwareVersion = "v20250401-1540";
 String messages[200];
 int messageCount = 0;
 bool isWiFiReady = false;
@@ -198,7 +198,7 @@ bool sendDiscordMessage(int type) {
     int response = http.POST(payload);
     http.end();
     if (response > 0) {
-      log("✅ Discord sent: " + content);
+      log("✅ Discord sent: Message sucesfully");
       return true;
     } else {
       log("❌ Discord failed (HTTP " + String(response) + "). Retrying...");
