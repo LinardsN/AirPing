@@ -4,6 +4,7 @@
 #include <HTTPUpdate.h>
 #include "esp_sleep.h"
 #include "Preferences.h"
+#include <time.h>
 
 Preferences prefs;
 
@@ -12,14 +13,41 @@ const char* ssid = "TestDevLab-Guest";
 const char* password = "";
 
 const char* webhookUrl = "https://discord.com/api/webhooks/1355142639048986684/RdtSC3huBSFZ2GA6rC5Gl3frSySLFpsSxrHCBINNybU9vjlxoaXE1Ee4okFnWHjcOY9V";
+const char* maintenanceWebhookUrl = "https://discord.com/api/webhooks/1356533458519724032/Yk-EVARE1Y_mU1YVANwETHQocCJBQhMf4Bq30Pr3PqqZmAXu_n7qEyH4AMR9obCk2GsS";
 const char* firmwareUrl = "https://raw.githubusercontent.com/LinardsN/AirPing/main/sketch_mar28a/build/esp32.esp32.esp32/sketch_mar28a.ino.bin";
 const char* messagesUrl = "https://raw.githack.com/LinardsN/AirPing/main/sketch_mar28a/messages.txt";
 
 const gpio_num_t buttonPin = GPIO_NUM_13;
+const unsigned long cooldownSeconds = 15 * 60; // 15 minutes
+
 String messages[200];
 int messageCount = 0;
-const uint64_t cooldownMicros = 15ULL * 60ULL * 1000000ULL; // 15 minutes in microseconds
+bool isWiFiReady = false;
+unsigned long pressCount = 0;
 
+// === VERSIONING ===
+String monthNum(const char* dateStr) {
+  String monthStr = String(dateStr).substring(0, 3);
+  if (monthStr == "Jan") return "01";
+  if (monthStr == "Feb") return "02";
+  if (monthStr == "Mar") return "03";
+  if (monthStr == "Apr") return "04";
+  if (monthStr == "May") return "05";
+  if (monthStr == "Jun") return "06";
+  if (monthStr == "Jul") return "07";
+  if (monthStr == "Aug") return "08";
+  if (monthStr == "Sep") return "09";
+  if (monthStr == "Oct") return "10";
+  if (monthStr == "Nov") return "11";
+  if (monthStr == "Dec") return "12";
+  return "00";
+}
+
+String firmwareVersion = "v" + String(__DATE__).substring(7,11) + 
+                         monthNum(__DATE__) +
+                         String(__DATE__).substring(4,6) + "-" +
+                         String(__TIME__).substring(0,2) + 
+                         String(__TIME__).substring(3,5);
 
 void setup() {
   Serial.begin(115200);
@@ -28,72 +56,90 @@ void setup() {
 
   prefs.begin("airping", false);
   loadMessages();
+  pressCount = prefs.getULong("pressCount", 0);
 
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
   bool wokeFromButton = (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0);
   bool maintenanceMode = !wokeFromButton && digitalRead(buttonPin) == LOW;
 
-if (wokeFromButton) {
-  Serial.println("🔘 Wake from deep sleep by button press.");
+  log("📂 Loaded " + String(messageCount) + " messages from memory.");
 
-  uint64_t nowMicros = esp_timer_get_time(); // microseconds since boot
-  uint64_t lastSent = prefs.getULong64("lastSent", 0);
-
-  if (lastSent != 0 && nowMicros - lastSent < cooldownMicros) {
-    Serial.printf("⏳ Cooldown active. Try again later.\n");
-  } else {
+  if (wokeFromButton) {
+    log("🔘 Wake from deep sleep by button press.");
     connectWiFi();
-    if (sendDiscordMessage()) {
-      prefs.putULong64("lastSent", nowMicros);
-    }
-  }
+    syncTime();
 
-  enterDeepSleep();
-}
+    time_t now = time(nullptr);
+    time_t lastSent = prefs.getULong("lastSent", 0);
 
-
-  else if (maintenanceMode) {
-    Serial.println("🛠️ Maintenance mode (button held at boot): Fetching messages + OTA...");
-    if (connectWiFi()) {
-      fetchMessages();
-      saveMessages();
-      performOTAUpdate();
+    if (lastSent == 0 || now - lastSent >= cooldownSeconds) {
+      if (sendDiscordMessage()) {
+        prefs.putULong("lastSent", now);
+        pressCount++;
+        prefs.putULong("pressCount", pressCount);
+        log("✅ Public message sent. Total calls outside: " + String(pressCount));
+      } else {
+        log("❌ Failed to send public message.");
+      }
     } else {
-      Serial.println("❌ WiFi failed. Skipping OTA & message fetch.");
+      unsigned long remaining = cooldownSeconds - (now - lastSent);
+      unsigned long minutes = remaining / 60;
+      unsigned long seconds = remaining % 60;
+      log("⏳ Cooldown active: " + String(minutes) + "m " + String(seconds) + "s remaining.");
     }
+
+    enterDeepSleep();
+  }
+  else if (maintenanceMode) {
+    log("🛠️ Maintenance mode (button held at boot): Fetching messages + OTA...");
+    connectWiFi();
+    syncTime();
+    fetchMessages();
+    saveMessages();
+    log("📥 Fetched and saved messages.");
+    performOTAUpdate();
     enterDeepSleep();
   }
   else {
-    Serial.println("⏳ Normal boot/reset. Sleeping...");
+    log("⏳ Normal boot/reset. Sleeping...");
     enterDeepSleep();
   }
 }
 
-void loop() {
-  // unused
-}
+void loop() {}
 
-// === CONNECT TO WIFI ===
-bool connectWiFi() {
+void connectWiFi() {
   WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi...");
-  unsigned long startAttemptTime = millis();
-
-  while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 20000) {
+  Serial.print("Connecting to WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
+  log("\n✅ WiFi connected! Signal strength: " + String(WiFi.RSSI()) + " dBm");
+  isWiFiReady = true;
+  log("📶 WiFi connected with RSSI: " + String(WiFi.RSSI()) + " dBm");
+}
 
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.printf("\n✅ WiFi connected! Signal strength: %d dBm\n", WiFi.RSSI());
-    return true;
+void syncTime() {
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  Serial.print("⏳ Syncing time");
+  time_t now = time(nullptr);
+  int retries = 0;
+  while (now < 100000 && retries < 20) {
+    delay(500);
+    Serial.print(".");
+    now = time(nullptr);
+    retries++;
+  }
+  Serial.println();
+
+  if (now > 100000) {
+    log("✅ Time synced: " + String(ctime(&now)));
   } else {
-    Serial.println("\n⚠️ WiFi failed.");
-    return false;
+    log("❌ Failed to sync time.");
   }
 }
 
-// === FETCH MESSAGES WITH RETRY ===
 void fetchMessages() {
   WiFiClientSecure client;
   client.setInsecure();
@@ -106,32 +152,30 @@ void fetchMessages() {
 
   while (attempt < maxRetries && !success) {
     https.setTimeout(timeoutMs);
-    Serial.printf("⬇️ Fetching messages (attempt %d)...\n", attempt + 1);
+    log("⬇️ Fetching messages (attempt " + String(attempt + 1) + ")...");
 
     if (https.begin(client, messagesUrl)) {
       int httpCode = https.GET();
-
       if (httpCode == HTTP_CODE_OK) {
         String payload = https.getString();
         parseMessages(payload);
-        Serial.printf("✅ Loaded %d messages.\n", messageCount);
+        log("✅ Loaded " + String(messageCount) + " messages.");
         success = true;
       } else {
-        Serial.printf("❌ Fetch failed (HTTP %d)\n", httpCode);
+        log("❌ Fetch failed (HTTP " + String(httpCode) + ")");
       }
-
       https.end();
     } else {
-      Serial.println("❌ HTTPS connection failed.");
+      log("❌ HTTPS connection failed.");
     }
 
     if (!success) {
       attempt++;
       if (attempt < maxRetries) {
-        delay(2000); // wait before retry
-        Serial.println("🔁 Retrying fetch...");
+        delay(2000);
+        log("🔁 Retrying fetch...");
       } else {
-        Serial.println("❌ All attempts to fetch messages failed.");
+        log("❌ All attempts to fetch messages failed.");
       }
     }
   }
@@ -149,79 +193,80 @@ void parseMessages(String payload) {
   }
 }
 
-// === SEND DISCORD MESSAGE WITH RETRY ===
 bool sendDiscordMessage() {
   if (messageCount == 0) {
-    Serial.println("⚠️ No messages available to send.");
+    log("⚠️ No messages available to send.");
     return false;
   }
 
   String content = "@here " + messages[random(messageCount)];
-  HTTPClient http;
-  http.setTimeout(15000);
-  http.begin(webhookUrl);
-  http.addHeader("Content-Type", "application/json");
-
   String payload = "{\"content\":\"" + content + "\"}";
-  int response = http.POST(payload);
 
-  if (response > 0) {
-    Serial.println("✅ Discord sent: " + content);
-    http.end();
-    return true;
-  } else {
-    Serial.printf("❌ Discord failed (HTTP %d). Retrying once...\n", response);
-    delay(2000);
-    response = http.POST(payload);
+  while (true) {
+    HTTPClient http;
+    http.setTimeout(15000);
+    http.begin(webhookUrl);
+    http.addHeader("Content-Type", "application/json");
+
+    int response = http.POST(payload);
     if (response > 0) {
-      Serial.println("✅ Discord sent on retry.");
+      log("✅ Discord sent: " + content);
       http.end();
       return true;
     } else {
-      Serial.printf("❌ Discord still failed (HTTP %d)\n", response);
+      log("❌ Discord failed (HTTP " + String(response) + "). Retrying...");
+      http.end();
+      delay(1000);
     }
   }
-
-  http.end();
-  return false;
 }
 
-// === OTA UPDATE WITH TIMEOUT ===
 void performOTAUpdate() {
   WiFiClientSecure client;
   client.setInsecure();
-  client.setTimeout(15000); // Proper OTA timeout
-
-  Serial.println("🔄 Checking for OTA update...");
+  client.setTimeout(15000);
+  log("🔄 Checking for OTA update...");
   t_httpUpdate_return ret = httpUpdate.update(client, firmwareUrl, "1.0");
 
   if (ret == HTTP_UPDATE_OK)
-    Serial.println("✅ OTA update successful!");
+    log("✅ OTA update successful!");
   else if (ret == HTTP_UPDATE_NO_UPDATES)
-    Serial.println("✅ Firmware already up to date.");
+    log("✅ Firmware already up to date.");
   else
-    Serial.printf("❌ OTA failed (%d): %s\n", httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str());
+    log("❌ OTA failed: " + String(httpUpdate.getLastErrorString()));
 }
 
-// === DEEP SLEEP ===
 void enterDeepSleep() {
-  esp_sleep_enable_ext0_wakeup(buttonPin, 0); // Wake on button press
-  Serial.println("💤 Entering deep sleep...");
+  esp_sleep_enable_ext0_wakeup(buttonPin, 0);
+  log("💤 Entering deep sleep...");
   delay(200);
   esp_deep_sleep_start();
 }
 
-// === STORE MESSAGES ===
 void saveMessages() {
   prefs.putInt("count", messageCount);
   for (int i = 0; i < messageCount; i++)
     prefs.putString(("msg" + String(i)).c_str(), messages[i]);
-  Serial.println("💾 Messages saved.");
+  log("💾 Messages saved.");
 }
 
 void loadMessages() {
   messageCount = prefs.getInt("count", 0);
   for (int i = 0; i < messageCount; i++)
     messages[i] = prefs.getString(("msg" + String(i)).c_str(), "");
-  Serial.printf("📂 Loaded %d messages from memory.\n", messageCount);
+}
+
+void log(String msg) {
+  String versioned = firmwareVersion + " | " + msg;
+  Serial.println(msg);
+
+  if (!isWiFiReady || WiFi.status() != WL_CONNECTED) return;
+
+  HTTPClient http;
+  http.setTimeout(10000);
+  http.begin(maintenanceWebhookUrl);
+  http.addHeader("Content-Type", "application/json");
+  String payload = "{\"content\":\"🛠️ " + versioned + "\"}";
+  http.POST(payload);
+  http.end();
 }
