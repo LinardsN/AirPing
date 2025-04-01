@@ -10,17 +10,17 @@ Preferences prefs;
 
 // === CONFIGURATION ===
 const char* ssid = "TestDevLab-Guest";
-const char* password = "ThinkQualityFirst";
+const char* password = "";
 
 const char* webhookUrl = "https://discord.com/api/webhooks/1355142639048986684/RdtSC3huBSFZ2GA6rC5Gl3frSySLFpsSxrHCBINNybU9vjlxoaXE1Ee4okFnWHjcOY9V";
 const char* maintenanceWebhookUrl = "https://discord.com/api/webhooks/1356533458519724032/Yk-EVARE1Y_mU1YVANwETHQocCJBQhMf4Bq30Pr3PqqZmAXu_n7qEyH4AMR9obCk2GsS";
 const char* firmwareUrl = "https://raw.githubusercontent.com/LinardsN/AirPing/main/sketch_mar28a/build/esp32.esp32.esp32/sketch_mar28a.ino.bin";
-const char* remoteVersionUrl = "https://raw.githubusercontent.com/LinardsN/AirPing/main/firmware_version.txt";
+const char* remoteVersionUrl = "https://raw.githubusercontent.com/LinardsN/AirPing/main/version.txt";
 
 const gpio_num_t buttonPin = GPIO_NUM_13;
 const unsigned long cooldownSeconds = 15 * 60;
 
-String firmwareVersion = "v20250401-1150";
+String firmwareVersion = "v20250401-1219";
 String messages[200];
 int messageCount = 0;
 bool isWiFiReady = false;
@@ -55,8 +55,6 @@ void setup() {
         pressCount++;
         prefs.putULong("pressCount", pressCount);
         log("✅ Public message sent. Total calls outside: " + String(pressCount));
-
-        checkForRemoteUpdate();
       } else {
         log("❌ Failed to send public message.");
       }
@@ -67,6 +65,7 @@ void setup() {
       log("⏳ Cooldown active: " + String(minutes) + "m " + String(seconds) + "s remaining.");
     }
 
+    checkForRemoteUpdate();
     enterDeepSleep();
   } else if (maintenanceMode) {
     log("🛠️ Maintenance mode (button held at boot): Fetching messages + OTA...");
@@ -135,35 +134,29 @@ bool sendDiscordMessage() {
 }
 
 void checkForRemoteUpdate() {
-  log("🌐 Checking version.json for firmware update...");
+  log("🌐 Checking remote .txt file for firmware version...");
+
   WiFiClientSecure client;
   client.setInsecure();
   HTTPClient https;
   https.setTimeout(10000);
 
-  if (https.begin(client, stateJsonUrl)) {
+  if (https.begin(client, remoteVersionUrl)) {
     int httpCode = https.GET();
     if (httpCode == HTTP_CODE_OK) {
-      String payload = https.getString();
-      int idx = payload.indexOf("\"firmwareVersion\"");
-      if (idx != -1) {
-        int start = payload.indexOf(":", idx) + 2;
-        int end = payload.indexOf("\"", start);
-        String remoteVersion = payload.substring(start, end);
-        log("🔎 Remote version: " + remoteVersion);
-        log("📦 Local version: " + firmwareVersion);
+      String remoteVersion = https.getString();
+      remoteVersion.trim();
+      log("🔎 Remote version: " + remoteVersion);
+      log("📦 Local version: " + firmwareVersion);
 
-        if (remoteVersion != firmwareVersion) {
-          log("⬆️ New version detected! Starting OTA...");
-          performOTAUpdate();
-        } else {
-          log("✅ Firmware is up to date.");
-        }
+      if (remoteVersion != firmwareVersion) {
+        log("⬆️ New version detected! Starting OTA...");
+        performOTAUpdate();
       } else {
-        log("❌ Could not find firmwareVersion in JSON.");
+        log("✅ Firmware is up to date.");
       }
     } else {
-      log("❌ Failed to fetch version.json (HTTP " + String(httpCode) + ")");
+      log("❌ Failed to fetch version (HTTP " + String(httpCode) + ")");
     }
     https.end();
   } else {
@@ -214,11 +207,10 @@ void fetchMessages() {
   https.setTimeout(timeoutMs);
   log("🌐 Fetching messages from GitHub...");
 
-  if (https.begin(client, stateJsonUrl)) {
+  if (https.begin(client, remoteVersionUrl)) {
     int httpCode = https.GET();
     if (httpCode == HTTP_CODE_OK) {
       String payload = https.getString();
-      // You can add message parsing here if needed
       log("✅ Successfully fetched state JSON.");
     } else {
       log("❌ Failed to fetch messages (HTTP " + String(httpCode) + ")");
