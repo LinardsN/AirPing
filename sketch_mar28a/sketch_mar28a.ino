@@ -10,44 +10,21 @@ Preferences prefs;
 
 // === CONFIGURATION ===
 const char* ssid = "TestDevLab-Guest";
-const char* password = "";
+const char* password = "ThinkQualityFirst";
 
 const char* webhookUrl = "https://discord.com/api/webhooks/1355142639048986684/RdtSC3huBSFZ2GA6rC5Gl3frSySLFpsSxrHCBINNybU9vjlxoaXE1Ee4okFnWHjcOY9V";
 const char* maintenanceWebhookUrl = "https://discord.com/api/webhooks/1356533458519724032/Yk-EVARE1Y_mU1YVANwETHQocCJBQhMf4Bq30Pr3PqqZmAXu_n7qEyH4AMR9obCk2GsS";
 const char* firmwareUrl = "https://raw.githubusercontent.com/LinardsN/AirPing/main/sketch_mar28a/build/esp32.esp32.esp32/sketch_mar28a.ino.bin";
-const char* messagesUrl = "https://raw.githack.com/LinardsN/AirPing/main/sketch_mar28a/messages.txt";
+const char* stateJsonUrl = "https://raw.githubusercontent.com/LinardsN/AirPing/main/sketch_mar28a/version.json";
 
 const gpio_num_t buttonPin = GPIO_NUM_13;
-const unsigned long cooldownSeconds = 15 * 60; // 15 minutes
+const unsigned long cooldownSeconds = 15 * 60;
 
+String firmwareVersion = "v20250401-1150";
 String messages[200];
 int messageCount = 0;
 bool isWiFiReady = false;
 unsigned long pressCount = 0;
-
-// === VERSIONING ===
-String monthNum(const char* dateStr) {
-  String monthStr = String(dateStr).substring(0, 3);
-  if (monthStr == "Jan") return "01";
-  if (monthStr == "Feb") return "02";
-  if (monthStr == "Mar") return "03";
-  if (monthStr == "Apr") return "04";
-  if (monthStr == "May") return "05";
-  if (monthStr == "Jun") return "06";
-  if (monthStr == "Jul") return "07";
-  if (monthStr == "Aug") return "08";
-  if (monthStr == "Sep") return "09";
-  if (monthStr == "Oct") return "10";
-  if (monthStr == "Nov") return "11";
-  if (monthStr == "Dec") return "12";
-  return "00";
-}
-
-String firmwareVersion = "v" + String(__DATE__).substring(7,11) + 
-                         monthNum(__DATE__) +
-                         String(__DATE__).substring(4,6) + "-" +
-                         String(__TIME__).substring(0,2) + 
-                         String(__TIME__).substring(3,5);
 
 void setup() {
   Serial.begin(115200);
@@ -62,10 +39,10 @@ void setup() {
   bool wokeFromButton = (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0);
   bool maintenanceMode = !wokeFromButton && digitalRead(buttonPin) == LOW;
 
-  log("📂 Loaded " + String(messageCount) + " messages from memory.");
+  log("\uD83D\uDCC2 Loaded " + String(messageCount) + " messages from memory.");
 
   if (wokeFromButton) {
-    log("🔘 Wake from deep sleep by button press.");
+    log("\uD83D\uDD18 Wake from deep sleep by button press.");
     connectWiFi();
     syncTime();
 
@@ -77,31 +54,31 @@ void setup() {
         prefs.putULong("lastSent", now);
         pressCount++;
         prefs.putULong("pressCount", pressCount);
-        log("✅ Public message sent. Total calls outside: " + String(pressCount));
+        log("\u2705 Public message sent. Total calls outside: " + String(pressCount));
+
+        checkForRemoteUpdate();
       } else {
-        log("❌ Failed to send public message.");
+        log("\u274C Failed to send public message.");
       }
     } else {
       unsigned long remaining = cooldownSeconds - (now - lastSent);
       unsigned long minutes = remaining / 60;
       unsigned long seconds = remaining % 60;
-      log("⏳ Cooldown active: " + String(minutes) + "m " + String(seconds) + "s remaining.");
+      log("\u23F3 Cooldown active: " + String(minutes) + "m " + String(seconds) + "s remaining.");
     }
 
     enterDeepSleep();
-  }
-  else if (maintenanceMode) {
-    log("🛠️ Maintenance mode (button held at boot): Fetching messages + OTA...");
+  } else if (maintenanceMode) {
+    log("\uD83D\uDEE0\uFE0F Maintenance mode (button held at boot): Fetching messages + OTA...");
     connectWiFi();
     syncTime();
     fetchMessages();
     saveMessages();
-    log("📥 Fetched and saved messages.");
+    log("\uD83D\uDCC5 Fetched and saved messages.");
     performOTAUpdate();
     enterDeepSleep();
-  }
-  else {
-    log("⏳ Normal boot/reset. Sleeping...");
+  } else {
+    log("\u23F3 Normal boot/reset. Sleeping...");
     enterDeepSleep();
   }
 }
@@ -115,82 +92,21 @@ void connectWiFi() {
     delay(500);
     Serial.print(".");
   }
-  log("\n✅ WiFi connected! Signal strength: " + String(WiFi.RSSI()) + " dBm");
   isWiFiReady = true;
-  log("📶 WiFi connected with RSSI: " + String(WiFi.RSSI()) + " dBm");
+  log("\n\u2705 WiFi connected! RSSI: " + String(WiFi.RSSI()));
 }
 
 void syncTime() {
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-  Serial.print("⏳ Syncing time");
   time_t now = time(nullptr);
   int retries = 0;
   while (now < 100000 && retries < 20) {
     delay(500);
-    Serial.print(".");
     now = time(nullptr);
     retries++;
   }
-  Serial.println();
-
-  if (now > 100000) {
-    log("✅ Time synced: " + String(ctime(&now)));
-  } else {
-    log("❌ Failed to sync time.");
-  }
-}
-
-void fetchMessages() {
-  WiFiClientSecure client;
-  client.setInsecure();
-  HTTPClient https;
-
-  const int timeoutMs = 15000;
-  const int maxRetries = 2;
-  int attempt = 0;
-  bool success = false;
-
-  while (attempt < maxRetries && !success) {
-    https.setTimeout(timeoutMs);
-    log("⬇️ Fetching messages (attempt " + String(attempt + 1) + ")...");
-
-    if (https.begin(client, messagesUrl)) {
-      int httpCode = https.GET();
-      if (httpCode == HTTP_CODE_OK) {
-        String payload = https.getString();
-        parseMessages(payload);
-        log("✅ Loaded " + String(messageCount) + " messages.");
-        success = true;
-      } else {
-        log("❌ Fetch failed (HTTP " + String(httpCode) + ")");
-      }
-      https.end();
-    } else {
-      log("❌ HTTPS connection failed.");
-    }
-
-    if (!success) {
-      attempt++;
-      if (attempt < maxRetries) {
-        delay(2000);
-        log("🔁 Retrying fetch...");
-      } else {
-        log("❌ All attempts to fetch messages failed.");
-      }
-    }
-  }
-}
-
-void parseMessages(String payload) {
-  int from = 0, to = 0;
-  messageCount = 0;
-  while ((to = payload.indexOf('\n', from)) >= 0 && messageCount < 200) {
-    messages[messageCount++] = payload.substring(from, to);
-    from = to + 1;
-  }
-  if (from < payload.length() && messageCount < 200) {
-    messages[messageCount++] = payload.substring(from);
-  }
+  if (now > 100000) log("\uD83D\uDD52 Time synced: " + String(ctime(&now)));
+  else log("\u274C Failed to sync time.");
 }
 
 bool sendDiscordMessage() {
@@ -198,7 +114,6 @@ bool sendDiscordMessage() {
     log("⚠️ No messages available to send.");
     return false;
   }
-
   String content = "@here " + messages[random(messageCount)];
   String payload = "{\"content\":\"" + content + "\"}";
 
@@ -207,17 +122,52 @@ bool sendDiscordMessage() {
     http.setTimeout(15000);
     http.begin(webhookUrl);
     http.addHeader("Content-Type", "application/json");
-
     int response = http.POST(payload);
+    http.end();
     if (response > 0) {
-      log("✅ Discord sent: Message");
-      http.end();
+      log("✅ Discord sent: " + content);
       return true;
     } else {
       log("❌ Discord failed (HTTP " + String(response) + "). Retrying...");
-      http.end();
       delay(1000);
     }
+  }
+}
+
+void checkForRemoteUpdate() {
+  log("🌐 Checking version.json for firmware update...");
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient https;
+  https.setTimeout(10000);
+
+  if (https.begin(client, stateJsonUrl)) {
+    int httpCode = https.GET();
+    if (httpCode == HTTP_CODE_OK) {
+      String payload = https.getString();
+      int idx = payload.indexOf("\"firmwareVersion\"");
+      if (idx != -1) {
+        int start = payload.indexOf(":", idx) + 2;
+        int end = payload.indexOf("\"", start);
+        String remoteVersion = payload.substring(start, end);
+        log("🔎 Remote version: " + remoteVersion);
+        log("📦 Local version: " + firmwareVersion);
+
+        if (remoteVersion != firmwareVersion) {
+          log("⬆️ New version detected! Starting OTA...");
+          performOTAUpdate();
+        } else {
+          log("✅ Firmware is up to date.");
+        }
+      } else {
+        log("❌ Could not find firmwareVersion in JSON.");
+      }
+    } else {
+      log("❌ Failed to fetch version.json (HTTP " + String(httpCode) + ")");
+    }
+    https.end();
+  } else {
+    log("❌ HTTPS connection failed for version check.");
   }
 }
 
@@ -226,7 +176,7 @@ void performOTAUpdate() {
   client.setInsecure();
   client.setTimeout(15000);
   log("🔄 Checking for OTA update...");
-  t_httpUpdate_return ret = httpUpdate.update(client, firmwareUrl, "1.0");
+  t_httpUpdate_return ret = httpUpdate.update(client, firmwareUrl, firmwareVersion);
 
   if (ret == HTTP_UPDATE_OK)
     log("✅ OTA update successful!");
@@ -238,7 +188,7 @@ void performOTAUpdate() {
 
 void enterDeepSleep() {
   esp_sleep_enable_ext0_wakeup(buttonPin, 0);
-  log("💤 Entering deep sleep...");
+  log("😴 Entering deep sleep...");
   delay(200);
   esp_deep_sleep_start();
 }
@@ -266,7 +216,7 @@ void log(String msg) {
   http.setTimeout(10000);
   http.begin(maintenanceWebhookUrl);
   http.addHeader("Content-Type", "application/json");
-  String payload = "{\"content\":\"🛠️ " + versioned + "\"}";
+  String payload = "{\"content\":\"\uD83D\uDEE0\uFE0F " + versioned + "\"}";
   http.POST(payload);
   http.end();
 }
