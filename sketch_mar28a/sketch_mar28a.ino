@@ -210,7 +210,7 @@ bool sendDiscordMessage() {
 
     int response = http.POST(payload);
     if (response > 0) {
-      log("✅ Discord sent: " + content);
+      log("✅ Discord sent: Message");
       http.end();
       return true;
     } else {
