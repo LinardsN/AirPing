@@ -10,7 +10,7 @@ Preferences prefs;
 
 // === CONFIGURATION ===
 const char* ssid = "TestDevLab-Guest";
-const char* password = "";
+const char* password = "ThinkQualityFirst";
 
 const char* webhookUrl = "https://discord.com/api/webhooks/1355142639048986684/RdtSC3huBSFZ2GA6rC5Gl3frSySLFpsSxrHCBINNybU9vjlxoaXE1Ee4okFnWHjcOY9V";
 const char* maintenanceWebhookUrl = "https://discord.com/api/webhooks/1356533458519724032/Yk-EVARE1Y_mU1YVANwETHQocCJBQhMf4Bq30Pr3PqqZmAXu_n7qEyH4AMR9obCk2GsS";
@@ -22,7 +22,7 @@ const unsigned long cooldown1 = 15 * 60;
 const unsigned long cooldown2 = 10 * 60;
 const unsigned long cooldown3 = 30 * 60;
 
-String firmwareVersion = "v20250401-1435";
+String firmwareVersion = "v20250401-1457";
 String messages[200];
 int messageCount = 0;
 bool isWiFiReady = false;
@@ -45,10 +45,8 @@ void setup() {
 
   if (wokeFromButton) {
     log("🔘 Wake from deep sleep by button press.");
-    connectWiFi();
-    configTzTime("EET-2EEST,M3.5.0/3,M10.5.0/4", "pool.ntp.org", "time.nist.gov");  // Latvia/Riga is UTC+2
-    syncTime();
 
+    // Start press counting immediately
     unsigned long pressStart = millis();
     int pressCountThisSession = 1;
     bool released = false;
@@ -62,6 +60,11 @@ void setup() {
       }
     }
     log("🔢 Total presses detected: " + String(pressCountThisSession));
+
+    connectWiFi();
+    configTzTime("EET-2EEST,M3.5.0/3,M10.5.0/4", "pool.ntp.org", "time.nist.gov");
+    syncTime();
+
     time_t now = time(nullptr);
     struct tm* timeinfo = localtime(&now);
 
@@ -144,24 +147,6 @@ void log(String msg) {
   String payload = "{\"content\":\"🛠️ " + versioned + "\"}";
   http.POST(payload);
   http.end();
-}
-
-int detectPresses(int windowMs) {
-  int count = 1;
-  unsigned long start = millis();
-  bool released = false;
-
-  while (millis() - start < windowMs) {
-    if (digitalRead(buttonPin) == HIGH) released = true;
-    if (released && digitalRead(buttonPin) == LOW) {
-      count++;
-      released = false;
-      log("🔁 Detected additional press. Count: " + String(count));
-      delay(200); // debounce delay
-    }
-  }
-  log("🔢 Total presses detected: " + String(count));
-  return count;
 }
 
 void connectWiFi() {
