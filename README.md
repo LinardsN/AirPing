@@ -1,6 +1,7 @@
 # 🟢 AirPing – ESP32 Fresh Air Button
 
 **AirPing** is a battery-powered ESP32 button that sends messages to a Discord channel when pressed. Use it in the office to call teammates outside, announce coffee breaks, or lunch time — all from a physical button.
+<img width="530" alt="image" src="https://github.com/user-attachments/assets/05de6ddd-1ce4-4b69-bd72-efe544f2112c" />
 
 ---
 
